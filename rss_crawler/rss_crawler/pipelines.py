@@ -15,7 +15,10 @@ class RssCrawlerPipeline:
         
         filename = os.path.join(output_dir, f'{spider.name}_results.csv')
         self.file = open(filename, 'w', newline='', encoding='utf-8')
-        self.writer = csv.DictWriter(self.file, fieldnames=['url', 'title', 'text_content'])
+        self.writer = csv.DictWriter(
+            self.file, 
+            fieldnames=['url', 'title', 'text_content', 'published_date', 'author', 'is_rss']
+        )
         self.writer.writeheader()
 
     def close_spider(self, spider):

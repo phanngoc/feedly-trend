@@ -28,7 +28,6 @@ class LinkSpider(scrapy.Spider):
     def is_rss_link(self, url):
         """Kiểm tra xem URL có phải là RSS feed không"""
         return any(pattern in url.lower() for pattern in [
-            '/rss', 
             '.rss',
             '/feed',
             '.xml',
@@ -54,13 +53,13 @@ class LinkSpider(scrapy.Spider):
     def parse(self, response):
         if self.crawled_urls >= self.max_urls:
             return
-        
+        print('parse:', response.url)
         if not self.is_allowed_domain(response.url):
             self.logger.info(f"Skipping URL from different domain: {response.url}")
             return
             
         self.crawled_urls += 1
-
+        print('crawled_urls:', self.crawled_urls, self.is_rss_link(response.url))
         # Nếu là RSS feed, xử lý bằng feedparser
         if self.is_rss_link(response.url):
             self.logger.info(f"Parsing RSS feed: {response.url}")
@@ -85,9 +84,9 @@ class LinkSpider(scrapy.Spider):
         # Follow RSS links
         link_extractor = LinkExtractor()
         links = link_extractor.extract_links(response)
-        
+        print('links:', links)
         for link in links:
-            if self.is_allowed_domain(link.url) and self.is_rss_link(link.url):
+            if self.is_allowed_domain(link.url):
                 self.logger.info(f"Following RSS link: {link.url}")
                 yield response.follow(link.url, callback=self.parse)
 
@@ -96,4 +95,4 @@ class LinkSpider(scrapy.Spider):
         # assistant = Assistant.get(Assistant.id == self.assistant_id)
         # assistant.is_crawled = True
         # assistant.save()
-        self.connection.close()
+        # self.connection.close()
