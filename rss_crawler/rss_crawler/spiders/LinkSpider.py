@@ -12,8 +12,10 @@ class LinkSpider(scrapy.Spider):
 
     def __init__(self, start_url=None, assistant_id=None, max_urls=500, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.start_urls = [start_url] if start_url else ['https://vnexpress.net/rss']
+        start_url = start_url if start_url else 'https://thanhnien.vn/'
+        self.start_urls = [start_url]
         self.allowed_domains = [urlparse(start_url).hostname] if start_url else []
+        print('self.allowed_domains:', self.allowed_domains)
         self.assistant_id = assistant_id
         self.max_urls = max_urls
         self.crawled_urls = 0
@@ -22,6 +24,7 @@ class LinkSpider(scrapy.Spider):
         if not self.allowed_domains:  # If no allowed domains specified, allow all
             return True
         domain = urlparse(url).hostname
+        print('is_allowed_domain', url)
         return any(domain == allowed or domain.endswith('.' + allowed) 
                   for allowed in self.allowed_domains)
 
@@ -92,7 +95,3 @@ class LinkSpider(scrapy.Spider):
 
     def closed(self, reason):
         print('closed:reason:', reason)
-        # assistant = Assistant.get(Assistant.id == self.assistant_id)
-        # assistant.is_crawled = True
-        # assistant.save()
-        # self.connection.close()

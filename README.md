@@ -11,3 +11,4 @@ App tương tự: https://feedly.com/
 - Nghiên cứu xu hướng và tạo báo cáo với AI tích hợp.
 - Chia sẻ thông tin chi tiết có thể hành động và cơ hội xu hướng.
 
+
