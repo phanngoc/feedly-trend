@@ -1,73 +1,86 @@
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-import re
-import unicodedata
-from text_cleaner import TextCleaner
+from flask import Flask, request, jsonify
+from werkzeug.security import generate_password_hash, check_password_hash
+from peewee import IntegrityError
+from models.database_models import db, User, Feed, Subscription
 
-def normalize_text(text):
-    # Chuẩn hóa unicode
-    text = unicodedata.normalize('NFKC', text)
-    # Loại bỏ các ký tự đặc biệt
-    text = re.sub(r'[^\s\wáàảãạăắằẳẵặâấầẩẫậéèẻẽẹêếềểễệóòỏõọôốồổỗộơớờởỡợíìỉĩịúùủũụưứừửữựýỳỷỹỵđ_]', ' ', text)
-    # Chuẩn hóa khoảng trắng
-    text = re.sub(r'\s+', ' ', text).strip()
-    return text.lower()
+app = Flask(__name__)
 
-def remove_similar_posts(df, similarity_threshold=0.8):
-    # Làm sạch nội dung text trước khi so sánh
-    df['cleaned_content'] = df['text_content'].apply(TextCleaner.clean_text)
+@app.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    name = data.get('name')
+    email = data.get('email')
+    password = data.get('password')
     
-    # Chuẩn hóa tiêu đề
-    normalized_titles = df['title'].apply(normalize_text)
+    if not name or not email or not password:
+        return jsonify({'error': 'Missing required fields'}), 400
     
-    # Tạo TF-IDF vectors từ cả tiêu đề và nội dung đã làm sạch
-    vectorizer = TfidfVectorizer(min_df=1)
-    tfidf_matrix = vectorizer.fit_transform(normalized_titles + ' ' + df['cleaned_content'])
+    password_hash = generate_password_hash(password)
     
-    # Tính cosine similarity
-    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
-    
-    # Tìm các cặp bài viết tương tự
-    duplicate_indices = set()
-    for i in range(len(cosine_sim)):
-        for j in range(i + 1, len(cosine_sim)):
-            if cosine_sim[i][j] > similarity_threshold:
-                # Giữ lại bài có tiêu đề dài hơn
-                if len(df.iloc[i]['title']) < len(df.iloc[j]['title']):
-                    duplicate_indices.add(i)
-                else:
-                    duplicate_indices.add(j)
-    
-    # Loại bỏ các bài trùng lặp
-    unique_df = df.drop(index=list(duplicate_indices))
-    print(f"\nĐã loại bỏ {len(duplicate_indices)} bài viết trùng lặp")
-    
-    # Xóa cột cleaned_content tạm thời
-    unique_df = unique_df.drop('cleaned_content', axis=1)
-    return unique_df
+    try:
+        with db.atomic():
+            user = User.create(name=name, email=email, password_hash=password_hash)
+        return jsonify({'message': 'User registered successfully'}), 201
+    except IntegrityError:
+        return jsonify({'error': 'Email already registered'}), 400
 
-def analyze_csv():
-    # Đọc file CSV
-    df = pd.read_csv('rss_crawler/output/link_spider_results.csv')
+@app.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    email = data.get('email')
+    password = data.get('password')
     
-    print("\nSố lượng bài viết ban đầu:", len(df))
+    if not email or not password:
+        return jsonify({'error': 'Missing required fields'}), 400
     
-    # Loại bỏ các bài viết tương tự
-    unique_df = remove_similar_posts(df)
-    
-    print("Số lượng bài viết sau khi lọc:", len(unique_df))
-    
-    print("\nCác tiêu đề còn lại sau khi lọc:")
-    for title in unique_df['title']:
-        print(f"- {title}")
-        
-    # Lưu kết quả đã lọc
-    unique_df.to_csv('rss_crawler/output/unique_posts.csv', index=False)
+    try:
+        user = User.get(User.email == email)
+        if check_password_hash(user.password_hash, password):
+            return jsonify({'message': 'Login successful'}), 200
+        else:
+            return jsonify({'error': 'Invalid credentials'}), 401
+    except User.DoesNotExist:
+        return jsonify({'error': 'Invalid credentials'}), 401
 
-def main():
-    analyze_csv()
+@app.route('/register_feed', methods=['POST'])
+def register_feed():
+    data = request.get_json()
+    title = data.get('title')
+    url = data.get('url')
+    description = data.get('description')
+    language = data.get('language')
+    
+    if not title or not url:
+        return jsonify({'error': 'Missing required fields'}), 400
+    
+    try:
+        with db.atomic():
+            feed = Feed.create(title=title, url=url, description=description, language=language)
+        return jsonify({'message': 'Feed registered successfully'}), 201
+    except IntegrityError:
+        return jsonify({'error': 'Feed URL already registered'}), 400
 
-if __name__ == "__main__":
-    main()
+@app.route('/api/subscriptions', methods=['GET'])
+def get_subscriptions():
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'Missing user_id'}), 400
 
+    subscriptions = Subscription.select().where(Subscription.user_id == user_id)
+    subscriptions_data = [
+        {
+            'id': subscription.id,
+            'feed': {
+                'id': subscription.feed.id,
+                'title': subscription.feed.title,
+                'url': subscription.feed.url,
+                'description': subscription.feed.description,
+                'language': subscription.feed.language,
+            }
+        }
+        for subscription in subscriptions
+    ]
+    return jsonify(subscriptions_data), 200
+
+if __name__ == '__main__':
+    app.run(debug=True)
